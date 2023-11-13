@@ -67,13 +67,14 @@ team_t team = {
 
 
 static char *heap_listp;
+static char *last_bp;
 
 inline int mm_init(void);
 inline static void *extend_heap(size_t words);
 inline void mm_free(void *bp);
 inline static void *coalesce(void *bp);
 inline void *mm_malloc(size_t size);
-inline static void *find_fit_first(size_t asize);
+// inline static void *find_fit_first(size_t asize);
 inline static void *find_fit_next(size_t asize);
 inline static void place(char *bp, size_t asize);
 
@@ -95,6 +96,9 @@ int mm_init(void) {
 
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
+
+    last_bp = (char *)heap_listp;
+
     return 0;
 }
 
@@ -121,35 +125,29 @@ void mm_free(void *bp) {
 }
 
 static void *coalesce(void *bp) {
-    printf("coalescing (%p)... ", bp);
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
     if (prev_alloc && next_alloc) {
-        printf("no coalescing needed.\n");
+        last_bp = bp;
         return bp;
     } else if (prev_alloc && !next_alloc) {
-        printf("original size: %d\n", size);
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-        printf("changed size: %d\n", size);
         PUT(HDRP(bp), PACK(size, 0));
-        printf("new block header: %p\n", HDRP(bp));
         PUT(FTRP(bp), PACK(size, 0));
-        printf("new block footer: %p\n", FTRP(bp));
-        printf("next block. start: %p, end: %p\n", bp, NEXT_BLKP(bp));
     } else if (!prev_alloc && next_alloc) {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
-        printf("prev block. start: %p, end: %p\n", bp, NEXT_BLKP(bp));
     } else {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
+    last_bp = bp;
     return bp;
 }
 
@@ -166,8 +164,9 @@ void *mm_malloc(size_t size) {
     else
         asize = DSIZE * ((size + (DSIZE) + (DSIZE-1)) / DSIZE);
 
-    if ((bp = find_fit_first(asize)) != NULL) {
+    if ((bp = find_fit_next(asize)) != NULL) {
         place(bp, asize);
+        last_bp = bp;
         return bp;
     }
 
@@ -175,16 +174,44 @@ void *mm_malloc(size_t size) {
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL)
         return NULL;
     place(bp, asize);
+    last_bp = bp;
     return bp;
 }
 
-static void *find_fit_first(size_t asize) {
-    void *bp = heap_listp;
+// static void *find_fit_first(size_t asize) {
+//     void *bp = heap_listp;
+//     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+//         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+//             return bp;
+//         }
+//     }
+//     return (void *)0;
+// }
+
+static void *find_fit_next(size_t asize) {
+    void *bp = last_bp;
+
+    while (GET_SIZE(HDRP(bp)) > 0) {
+        if (GET_ALLOC(HDRP(bp))) {
+            bp = NEXT_BLKP(bp);
+            continue;
+        }
+        if (asize > GET_SIZE(HDRP(bp))) {
+            bp = NEXT_BLKP(bp);
+            continue;
+        }
+        last_bp = bp;
+        return bp;
+    }
+
+    bp = heap_listp;
     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            last_bp = bp;
             return bp;
         }
     }
+
     return (void *)0;
 }
 
@@ -217,49 +244,4 @@ void *mm_realloc(void *bp, size_t size)
     memcpy(new_bp, old_bp, copySize);
     mm_free(old_bp);
     return new_bp;
-}
-
-
-int main() {
-    mem_init();
-    mm_init();
-
-    printf("heap start: %p\n", mem_heap_lo());
-    printf("prologue header: %p\n", heap_listp - WSIZE);
-    printf("prologue footer: %p\n", heap_listp);
-    printf("epilogue: %p\n", mem_heap_hi() - WSIZE);
-    printf("heap size: %d\n", mem_heapsize());
-    // printf("sbrk(0): %p\n", mem_sbrk(0));
-    printf("\n");
-    
-    void *bp = mm_malloc(8);
-    printf("bp header: %p\n", HDRP(bp));
-    printf("bp: %p\n", bp);
-    printf("bp footer: %p\n", FTRP(bp));
-    printf("\n");
-
-    void *bp2 = mm_malloc(16);
-    printf("bp2 header: %p\n", HDRP(bp2));
-    printf("bp2: %p\n", bp2);
-    printf("bp2 footer: %p\n", FTRP(bp2));
-    printf("\n");
-
-    // void *bp3 = mm_malloc(8);
-    // printf("bp3 header: %p\n", HDRP(bp3));
-    // printf("bp3: %p\n", bp3);
-    // printf("bp3 footer: %p\n", FTRP(bp3));
-    // printf("\n");
-    
-    mm_free(bp2);
-
-    void *bp4 = mm_malloc(4040);
-    printf("bp4 header: %p\n", HDRP(bp4));
-    printf("bp4: %p\n", bp4);
-    printf("bp4 footer: %p\n", FTRP(bp4));
-    printf("\n");
-
-    printf("heap start: %p\n", mem_heap_lo());
-    printf("changed? epilogue: %p\n", mem_heap_hi() - WSIZE);
-    printf("changed? heap size: %d\n", mem_heapsize());
-
 }
