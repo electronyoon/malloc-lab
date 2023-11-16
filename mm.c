@@ -18,20 +18,13 @@
 #include "mm.h"
 #include "memlib.h"
 
-#define DEBUG
-#ifdef DEBUG
-# define dbg_printblock(a) printblock(a)
-#else
-# define dbg_printblock(a)
-#endif
-
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
  * provide your team information in the following struct.
  ********************************************************/
 team_t team = {
     /* Team name */
-    "1team",
+    "우주옥",
     /* First member's full name */
     "Sangwoo Kim",
     /* First member's email address */
@@ -207,7 +200,6 @@ static void *find_fit_next(size_t asize) {
     bp = heap_listp;
     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-            last_bp = bp;
             return bp;
         }
     }
